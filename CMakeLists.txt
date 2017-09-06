@@ -21,12 +21,12 @@
 if (WIN32)
     cmake_minimum_required(VERSION 3.1 FATAL_ERROR)
 else()
-    cmake_minimum_required(VERSION 2.8.0 FATAL_ERROR)
+    cmake_minimum_required(VERSION 3.0 FATAL_ERROR)
 endif()
 
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release
-        CACHE STRING "Set build type to Debug o Release (default Release)" FORCE)
+        CACHE STRING "Set build type to Debug or Release (default Release)" FORCE)
 endif()
 string(TOLOWER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_LOWER)
 
@@ -34,11 +34,14 @@ string(TOLOWER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_LOWER)
 # what? why would you get id of other useful build types? - Ellzey
 set(CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "Limited configurations" FORCE)
 
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
+include(HunterGate)
+HunterGate(URL "https://github.com/ruslo/hunter/archive/v0.19.89.tar.gz"
+           SHA1 "98bf8e401fff1394e8df0a757772265511dd9084")
+
 project(libevent C)
 
-set(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/")
 string(REGEX MATCH "SunOS" SOLARIS "${CMAKE_SYSTEM_NAME}")
-
 
 include(CheckTypeSize)
 include(CheckFunctionExistsEx)
@@ -680,6 +683,7 @@ if(EVENT__HAVE_EVENT_PORTS)
 endif()
 
 if (NOT EVENT__DISABLE_OPENSSL)
+    hunter_add_package(OpenSSL)
     find_package(OpenSSL REQUIRED)
 
     set(EVENT__HAVE_OPENSSL 1)
@@ -712,14 +716,13 @@ endif()
 
 if (NOT EVENT__DISABLE_TESTS)
     # Zlib is only used for testing.
-    find_package(ZLIB)
+    hunter_add_package(ZLIB)
+    find_package(ZLIB REQUIRED)
 
-    if (ZLIB_LIBRARY AND ZLIB_INCLUDE_DIR)
-        include_directories(${ZLIB_INCLUDE_DIRS})
+    include_directories(${ZLIB_INCLUDE_DIRS})
 
-        set(EVENT__HAVE_LIBZ 1)
-        list(APPEND LIB_APPS ${ZLIB_LIBRARIES})
-    endif()
+    set(EVENT__HAVE_LIBZ 1)
+    list(APPEND LIB_APPS ${ZLIB_LIBRARIES})
 endif()
 
 set(SRC_EXTRA
