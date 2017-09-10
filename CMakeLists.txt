@@ -6,7 +6,7 @@ include(HunterGate)
 HunterGate(URL "https://github.com/ruslo/hunter/archive/v0.19.89.tar.gz"
            SHA1 "98bf8e401fff1394e8df0a757772265511dd9084")
 
-project(Libevent LANGUAGES C VERSION 2.2.0)
+project(Libevent LANGUAGES C VERSION 2.1.8)
 
 string(REGEX MATCH "SunOS" SOLARIS "${CMAKE_SYSTEM_NAME}")
 
@@ -277,8 +277,9 @@ source_group("Source Core"      FILES ${SRC_CORE})
 source_group("Source Extra"     FILES ${SRC_EXTRA})
 
 # Generate the configure headers.
-# (Place them in the build dir so we don't pollute the source tree with
-# generated files).
+# (Place them in the build dir so we don't polute the source tree with generated
+#  files).
+
 configure_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/event-config.h.cmake
     ${CMAKE_CURRENT_BINARY_DIR}/include/event2/event-config.h
