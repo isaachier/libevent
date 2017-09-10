@@ -301,11 +301,15 @@ endif()
 add_library(event_core ${SRC_CORE})
 
 target_compile_definitions(event_core PUBLIC HAVE_CONFIG_H ${__DEFINITIONS})
+if (EVENT__DISABLE_THREAD_SUPPORT)
+    target_compile_definitions(event_core PUBLIC "EVENT__DISABLE_THREAD_SUPPORT=1")
+endif()
 target_include_directories(event_core PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>"
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/compat>"
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>"
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>")
+
 
 if(WIN32)
     target_compile_definitions(event_core PUBLIC _CRT_SECURE_NO_WARNINGS
@@ -328,6 +332,7 @@ if (NOT EVENT__DISABLE_OPENSSL)
     target_link_libraries(event_openssl PUBLIC event_core
                                                OpenSSL::SSL
                                                OpenSSL::Crypto)
+    target_compile_definitions(event_openssl PUBLIC "EVENT__DISABLE_OPENSSL=0")
 endif()
 
 if (CMAKE_USE_PTHREADS_INIT)
@@ -335,6 +340,8 @@ if (CMAKE_USE_PTHREADS_INIT)
     add_library(event_pthreads ${SRC_PTHREADS})
     target_link_libraries(event_pthreads PUBLIC event_core
                                                 ${CMAKE_THREAD_LIBS_INIT})
+    target_compile_definitions(
+        event_pthreads PUBLIC "CMAKE_USE_PTHREADS_INIT=1")
 endif()
 
 ####
