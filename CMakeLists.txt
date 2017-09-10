@@ -18,11 +18,7 @@
 #       cmake -G "Visual Studio 10" ..
 #       start libevent.sln
 #
-if (WIN32)
-    cmake_minimum_required(VERSION 3.1 FATAL_ERROR)
-else()
-    cmake_minimum_required(VERSION 2.8.0 FATAL_ERROR)
-endif()
+cmake_minimum_required(VERSION 3.1 FATAL_ERROR)
 
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release
@@ -30,13 +26,18 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 string(TOLOWER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_LOWER)
 
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/")
+
+include(HunterGate)
+HunterGate(URL "https://github.com/ruslo/hunter/archive/v0.19.89.tar.gz"
+           SHA1 "98bf8e401fff1394e8df0a757772265511dd9084")
+
 # get rid of the extra default configurations
 # what? why would you get id of other useful build types? - Ellzey
 set(CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "Limited configurations" FORCE)
 
 project(libevent C)
 
-set(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/")
 string(REGEX MATCH "SunOS" SOLARIS "${CMAKE_SYSTEM_NAME}")
 
 
@@ -61,6 +62,8 @@ set(EVENT_VERSION_MAJOR ${EVENT_GIT___VERSION_MAJOR})
 set(EVENT_VERSION_MINOR ${EVENT_GIT___VERSION_MINOR})
 set(EVENT_VERSION_PATCH ${EVENT_GIT___VERSION_PATCH})
 set(EVENT_VERSION_STAGE ${EVENT_GIT___VERSION_STAGE})
+set(PROJECT_VERSION
+    "${EVENT_VERSION_MAJOR}.${EVENT_VERSION_MINOR}.${EVENT_VERSION_PATCH}")
 
 
 set(EVENT_ABI_MAJOR ${EVENT_VERSION_MAJOR})
@@ -680,14 +683,13 @@ if(EVENT__HAVE_EVENT_PORTS)
 endif()
 
 if (NOT EVENT__DISABLE_OPENSSL)
+    hunter_add_package(OpenSSL)
     find_package(OpenSSL REQUIRED)
 
     set(EVENT__HAVE_OPENSSL 1)
 
     message(STATUS "OpenSSL include: ${OPENSSL_INCLUDE_DIR}")
     message(STATUS "OpenSSL lib: ${OPENSSL_LIBRARIES}")
-
-    include_directories(${OPENSSL_INCLUDE_DIR})
 
     list(APPEND SRC_CORE bufferevent_openssl.c)
     list(APPEND HDR_PUBLIC include/event2/bufferevent_ssl.h)
@@ -706,7 +708,7 @@ if (NOT EVENT__DISABLE_THREAD_SUPPORT)
 
         set(EVENT__HAVE_PTHREADS 1)
         list(APPEND SRC_CORE evthread_pthread.c)
-        list(APPEND LIB_APPS ${CMAKE_THREAD_LIBS_INIT})
+        list(APPEND LIB_APPS Threads::Threads)
     endif()
 endif()
 
@@ -799,29 +801,34 @@ configure_file(
 # Create the libraries.
 #
 
-# TODO: Add dynamic versions of the libraries as well.
-add_library(event_core ${EVENT__LIBRARY_TYPE}
-    ${HDR_PRIVATE}
-    ${HDR_COMPAT}
-    ${HDR_PUBLIC}
-    ${SRC_CORE})
+set(CMAKE_INCLUDE_CURRENT_DIR ON)
+set(CMAKE_INCLUDE_CURRENT_DIR_IN_INTERFACE ON)
 
-add_library(event_extra ${EVENT__LIBRARY_TYPE}
-    ${HDR_PRIVATE}
-    ${HDR_COMPAT}
-    ${HDR_PUBLIC}
-    ${SRC_CORE}
-    ${SRC_EXTRA})
+# TODO: Add dynamic versions of the libraries as well.
+add_library(event_core ${EVENT__LIBRARY_TYPE} ${SRC_CORE})
+target_include_directories(event_core PUBLIC
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/compat>)
+
+if (LIB_PLATFORM)
+    target_link_libraries(event_core PUBLIC ${LIB_PLATFORM})
+endif()
+
+if (EVENT__HAVE_OPENSSL)
+    target_link_libraries(event_core PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+endif()
+
+if (NOT EVENT__DISABLE_THREAD_SUPPORT)
+    target_link_libraries(event_core PUBLIC Threads::Threads)
+endif()
+
+add_library(event_extra ${EVENT__LIBRARY_TYPE} ${SRC_EXTRA})
+target_link_libraries(event_extra PUBLIC event_core)
 
 # library exists for historical reasons; it contains the contents of
 # both libevent_core and libevent_extra. You shouldn’t use it; it may
 # go away in a future version of Libevent.
-add_library(event ${EVENT__LIBRARY_TYPE}
-    ${HDR_PRIVATE}
-    ${HDR_COMPAT}
-    ${HDR_PUBLIC}
-    ${SRC_CORE}
-    ${SRC_EXTRA})
+add_library(event ${EVENT__LIBRARY_TYPE} ${SRC_CORE} ${SRC_EXTRA})
 
 if (EVENT__BUILD_SHARED_LIBRARIES)
     # Prepare static library to be linked to tests that need hidden symbols
@@ -833,18 +840,6 @@ if (EVENT__BUILD_SHARED_LIBRARIES)
         ${SRC_EXTRA})
 
     set(EVENT_EXTRA_FOR_TEST event_extra_static)
-
-   target_link_libraries(event_core ${OPENSSL_LIBRARIES}
-                                    ${CMAKE_THREAD_LIBS_INIT}
-                                    ${LIB_PLATFORM})
-
-   target_link_libraries(event ${OPENSSL_LIBRARIES}
-                               ${CMAKE_THREAD_LIBS_INIT}
-                               ${LIB_PLATFORM})
-
-   target_link_libraries(event_extra ${OPENSSL_LIBRARIES}
-                                      ${CMAKE_THREAD_LIBS_INIT}
-                                      ${LIB_PLATFORM})
 
   set_target_properties(event
         PROPERTIES SOVERSION
@@ -887,12 +882,7 @@ if (NOT EVENT__DISABLE_SAMPLES)
             sample/openssl_hostname_validation.c
             sample/hostcheck.c)
 
-        target_link_libraries(https-client
-                    event_extra
-                    ${LIB_APPS}
-                    ${LIB_PLATFORM})
-
-        add_dependencies(https-client event_extra)
+        target_link_libraries(https-client PUBLIC event_extra)
 
         # Requires OpenSSL.
         list(APPEND SAMPLES le-proxy)
@@ -902,12 +892,7 @@ if (NOT EVENT__DISABLE_SAMPLES)
         add_executable(${SAMPLE}
                     sample/${SAMPLE}.c)
 
-        target_link_libraries(${SAMPLE}
-                    event_extra
-                    ${LIB_APPS}
-                    ${LIB_PLATFORM})
-
-        add_dependencies(${SAMPLE} event_extra)
+        target_link_libraries(${SAMPLE} PUBLIC event_extra ${LIB_APPS})
     endforeach()
 
     if (WIN32)
@@ -929,11 +914,9 @@ if (NOT EVENT__DISABLE_BENCHMARK)
 
         add_executable(${BENCHMARK} ${BENCH_SRC})
 
-        target_link_libraries(${BENCHMARK}
+        target_link_libraries(${BENCHMARK} PUBLIC
                     event_extra
                     ${LIB_PLATFORM})
-
-        add_dependencies(${BENCHMARK} event_extra)
     endforeach()
 endif()
 
@@ -1023,9 +1006,7 @@ if (NOT EVENT__DISABLE_TESTS)
                             PROPERTIES COMPILE_DEFINITIONS
               "EVENT_BUILDING_REGRESS_TEST=1")
 
-            target_link_libraries(regress
-                            ${LIB_APPS}
-                            ${LIB_PLATFORM})
+            target_link_libraries(regress PUBLIC ${LIB_APPS})
         else()
             message(WARNING "No suitable Python interpreter found, cannot generate regress tests!")
         endif()
@@ -1065,12 +1046,9 @@ if (NOT EVENT__DISABLE_TESTS)
         add_executable(${TESTPROG}
                     test/${TESTPROG}.c)
 
-        target_link_libraries(${TESTPROG}
+        target_link_libraries(${TESTPROG} PUBLIC
                     ${EVENT_EXTRA_FOR_TEST}
                     ${LIB_PLATFORM})
-
-        add_dependencies(${TESTPROG}
-                    ${EVENT_EXTRA_FOR_TEST})
     endforeach()
 
     #
@@ -1325,110 +1303,89 @@ if (NOT EVENT__DISABLE_TESTS)
     include(CTest)
 endif()
 
-#
-# Installation preparation.
-#
+####
+# Installation (https://github.com/forexample/package-example)
 
-# Allow the user to override installation directories.
-set(EVENT_INSTALL_LIB_DIR       lib CACHE PATH "Installation directory for libraries")
-set(EVENT_INSTALL_BIN_DIR       bin CACHE PATH "Installation directory for executables")
-set(EVENT_INSTALL_INCLUDE_DIR   include CACHE PATH "Installation directory for header files")
+# Layout. This works for all platforms:
+#   * <prefix>/lib/cmake/<PROJECT-NAME>
+#   * <prefix>/lib/
+#   * <prefix>/include/
+set(config_install_dir "lib/cmake/${PROJECT_NAME}")
+set(include_install_dir "include")
 
-if(WIN32 AND NOT CYGWIN)
-  set(DEF_INSTALL_CMAKE_DIR cmake)
-else()
-  set(DEF_INSTALL_CMAKE_DIR lib/cmake/libevent)
-endif()
+set(generated_dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
-set(EVENT_INSTALL_CMAKE_DIR ${DEF_INSTALL_CMAKE_DIR} CACHE PATH "Installation directory for CMake files")
+# Configuration
+set(version_config "${generated_dir}/${PROJECT_NAME}ConfigVersion.cmake")
+set(project_config "${generated_dir}/${PROJECT_NAME}Config.cmake")
+set(targets_export_name "${PROJECT_NAME}Targets")
+set(namespace "${PROJECT_NAME}::")
 
-# Make sure the paths are absolute.
-foreach(p LIB BIN INCLUDE CMAKE)
-    set(var EVENT_INSTALL_${p}_DIR)
-    if(NOT IS_ABSOLUTE "${${var}}")
-        set(${var} "${CMAKE_INSTALL_PREFIX}/${${var}}")
-    endif()
-endforeach()
+# Include module with fuction 'write_basic_package_version_file'
+include(CMakePackageConfigHelpers)
 
-# Export targets (This is used for other CMake projects to easily find the libraries and include files).
-export(TARGETS event event_extra event_core
-        FILE "${PROJECT_BINARY_DIR}/LibeventTargets.cmake")
-export(PACKAGE libevent)
+# Configure '<PROJECT-NAME>ConfigVersion.cmake'
+# Note: PROJECT_VERSION is used as a VERSION
+write_basic_package_version_file(
+    "${version_config}" COMPATIBILITY SameMajorVersion
+)
 
-# Generate the config file for the build-tree.
-set(EVENT__INCLUDE_DIRS
-    "${PROJECT_SOURCE_DIR}/include"
-    "${PROJECT_BINARY_DIR}/include")
+# Configure '<PROJECT-NAME>Config.cmake'
+# Use variables:
+#   * targets_export_name
+#   * PROJECT_NAME
+configure_package_config_file(
+    "cmake/Config.cmake.in"
+    "${project_config}"
+    INSTALL_DESTINATION "${config_install_dir}"
+)
 
-set(LIBEVENT_INCLUDE_DIRS
-    ${EVENT__INCLUDE_DIRS}
-    CACHE PATH "Libevent include directories")
+list(APPEND EVENT_LIBS event_core event_extra event)
 
-configure_file(${PROJECT_SOURCE_DIR}/cmake/LibeventConfigBuildTree.cmake.in
-                ${PROJECT_BINARY_DIR}/LibeventConfig.cmake
-                @ONLY)
+# Targets:
+#   * <prefix>/lib/libevent_core.a
+#   * <prefix>/lib/libevent_extra.a
+#   * <prefix>/lib/libevent_openssl.a
+#   * <prefix>/lib/libevent_pthreads.a
+#   * header location after install: <prefix>/include
+#   * headers can be included by C/C++ code `#include <...>`
+install(
+    TARGETS ${EVENT_LIBS}
+    EXPORT "${targets_export_name}"
+    LIBRARY DESTINATION "lib"
+    ARCHIVE DESTINATION "lib"
+    RUNTIME DESTINATION "bin"
+    INCLUDES DESTINATION "${include_install_dir}"
+)
 
-# Generate the config file for the installation tree.
-file(RELATIVE_PATH
-    REL_INCLUDE_DIR
-    "${EVENT_INSTALL_CMAKE_DIR}"
-    "${EVENT_INSTALL_INCLUDE_DIR}") # Calculate the relative directory from the Cmake dir.
+# Headers:
+#   * Source/foo/Bar.hpp -> <prefix>/include/foo/Bar.hpp
+#   * Source/foo/Baz.hpp -> <prefix>/include/foo/Baz.hpp
+install(
+    FILES ${HDR_PUBLIC}
+    DESTINATION "${include_install_dir}/event2"
+)
 
-# Note the EVENT_CMAKE_DIR is defined in LibeventConfig.cmake.in,
-# we escape it here so it's evaluated when it is included instead
-# so that the include dirs are givenrelative to where the
-# config file is located.
-set(EVENT__INCLUDE_DIRS
-    "\${EVENT_CMAKE_DIR}/${REL_INCLUDE_DIR}")
+install(
+    FILES ${HDR_COMPAT}
+    DESTINATION "${include_install_dir}"
+)
 
-configure_file(${PROJECT_SOURCE_DIR}/cmake/LibeventConfig.cmake.in
-                ${PROJECT_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/LibeventConfig.cmake
-                @ONLY)
+# Config
+#   * <prefix>/lib/cmake/Libevent/LibeventConfig.cmake
+#   * <prefix>/lib/cmake/Libevent/LibeventConfigVersion.cmake
+install(
+    FILES "${project_config}" "${version_config}"
+    DESTINATION "${config_install_dir}"
+)
 
-# Generate version info for both build-tree and install-tree.
-configure_file(${PROJECT_SOURCE_DIR}/cmake/LibeventConfigVersion.cmake.in
-                ${PROJECT_BINARY_DIR}/LibeventConfigVersion.cmake
-                @ONLY)
-
-# Define the public headers.
-set_target_properties(event event_core event_extra
-    PROPERTIES PUBLIC_HEADER "${HDR_PUBLIC}")
-
-#
-# Install targets.
-#
-install(TARGETS event event_core event_extra
-        EXPORT LibeventTargets
-        RUNTIME DESTINATION "${EVENT_INSTALL_BIN_DIR}" COMPONENT bin
-        LIBRARY DESTINATION "${EVENT_INSTALL_LIB_DIR}" COMPONENT lib
-        ARCHIVE DESTINATION "${EVENT_INSTALL_LIB_DIR}" COMPONENT lib
-        PUBLIC_HEADER DESTINATION "${EVENT_INSTALL_INCLUDE_DIR}/event2" COMPONENT dev)
-
-# Install compat headers
-install(FILES ${HDR_COMPAT}
-    DESTINATION
-            "${EVENT_INSTALL_INCLUDE_DIR}"
-    COMPONENT dev)
-
-# Install the configs.
-install(FILES
-    ${PROJECT_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/LibeventConfig.cmake
-    ${PROJECT_BINARY_DIR}/LibeventConfigVersion.cmake
-    DESTINATION
-            "${EVENT_INSTALL_CMAKE_DIR}"
-        COMPONENT dev)
-
-# Install exports for the install-tree.
-install(EXPORT LibeventTargets
-        DESTINATION
-                    "${EVENT_INSTALL_CMAKE_DIR}"
-                COMPONENT dev)
-
-set(LIBEVENT_LIBRARIES
-        event
-        event_core
-        event_extra
-        CACHE STRING "Libevent libraries")
+# Config
+#   * <prefix>/lib/cmake/Libevent/LibeventTargets.cmake
+install(
+    EXPORT "${targets_export_name}"
+    NAMESPACE "${namespace}"
+    DESTINATION "${config_install_dir}"
+)
 
 message(STATUS "")
 message(STATUS "        ---( Libevent " ${EVENT_VERSION} " )---")
