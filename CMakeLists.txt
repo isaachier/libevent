@@ -36,7 +36,7 @@ HunterGate(URL "https://github.com/ruslo/hunter/archive/v0.19.89.tar.gz"
 # what? why would you get id of other useful build types? - Ellzey
 set(CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "Limited configurations" FORCE)
 
-project(libevent C)
+project(Libevent C)
 
 string(REGEX MATCH "SunOS" SOLARIS "${CMAKE_SYSTEM_NAME}")
 
