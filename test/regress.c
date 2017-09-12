@@ -1850,7 +1850,8 @@ static void send_a_byte_cb(evutil_socket_t fd, short what, void *arg)
 {
 	evutil_socket_t *sockp = arg;
 	(void) fd; (void) what;
-	(void) write(*sockp, "A", 1);
+	if (write(*sockp, "A", 1) < 0)
+		tt_fail_perror("write");
 }
 struct read_not_timeout_param
 {
@@ -3445,7 +3446,7 @@ struct testcase_t main_testcases[] = {
 
 	BASIC(active_by_fd, TT_FORK|TT_NEED_BASE|TT_NEED_SOCKETPAIR),
 
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(__APPLE__)
 	LEGACY(fork, TT_ISOLATED),
 #endif
 #ifdef EVENT__HAVE_PTHREADS
