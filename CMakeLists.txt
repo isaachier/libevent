@@ -495,7 +495,12 @@ CHECK_TYPE_SIZE("void *" EVENT__SIZEOF_VOID_P)
 #CHECK_FILE_OFFSET_BITS()
 #set(EVENT___FILE_OFFSET_BITS _FILE_OFFSET_BITS)
 
-include(CheckWaitpidSupportWNOWAIT)
+if(CMAKE_CROSSCOMPILING)
+    # Assume POSIX extension `WNOWAIT` is not present since we cannot check.
+    set(EVENT__HAVE_WAITPID_WITH_WNOWAIT 0)
+else()
+    include(CheckWaitpidSupportWNOWAIT)
+endif()
 
 # Verify kqueue works with pipes.
 if (EVENT__HAVE_KQUEUE)
