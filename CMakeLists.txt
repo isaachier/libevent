@@ -690,6 +690,7 @@ endif()
 if (NOT EVENT__DISABLE_OPENSSL)
     hunter_add_package(OpenSSL)
     find_package(OpenSSL REQUIRED)
+    list(APPEND package_deps OpenSSL)
 
     set(EVENT__HAVE_OPENSSL 1)
 
@@ -708,6 +709,7 @@ if (NOT EVENT__DISABLE_THREAD_SUPPORT)
         list(APPEND SRC_CORE evthread_win32.c)
     else()
         find_package(Threads REQUIRED)
+        list(APPEND package_deps Threads)
         if (NOT CMAKE_USE_PTHREADS_INIT)
             message(FATAL_ERROR
                             "Failed to find Pthreads, set EVENT__DISABLE_THREAD_SUPPORT to disable")
